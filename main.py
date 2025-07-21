@@ -3,93 +3,87 @@ import PyQt6
 import PyQt6.QtCore
 import PyQt6.QtGui
 from PyQt6.QtWidgets import QApplication, QMainWindow
+from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QTimer, QRectF, QTime
+from PyQt6.QtGui import QPainterPath, QRegion, QColor, QPen, QPainter
 
 
-class MainWindow(QMainWindow):
+class AnalogClockWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("PyQt6 Simple Window")
-        self.setGeometry(100, 100, 300, 300)
-        self.setWindowFlag(PyQt6.QtCore.Qt.WindowType.FramelessWindowHint, True)
-        path = PyQt6.QtGui.QPainterPath()
-        rect = self.rect()
-        path.addEllipse(
-            PyQt6.QtCore.QRectF(rect.x(), rect.y(), rect.width(), rect.height())
-        )
-        region = PyQt6.QtGui.QRegion(path.toFillPolygon().toPolygon())
-        self.setMask(region)
+        self._setup_window()
+        self._setup_timer()
 
-        self.timer = PyQt6.QtCore.QTimer(self)
-        self.timer.timeout.connect(self.print_time)
+    def _setup_timer(self):
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update)
         self.timer.start(1000)
 
-        # Translucent background
-        self.setAttribute(PyQt6.QtCore.Qt.WidgetAttribute.WA_TranslucentBackground, True)
+    def _setup_window(self):
+        self.setWindowTitle("Analog Clock")
+        self.setGeometry(100, 100, 300, 300)
+        self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self._set_window_circular_mask()
 
-        self.angle = 0
+    def _set_window_circular_mask(self):
+        path = QPainterPath()
+        path.addEllipse(QRectF(self.rect()))
+        region = QRegion(path.toFillPolygon().toPolygon())
+        self.setMask(region)
 
     def mousePressEvent(self, event):
-        if event.button() == PyQt6.QtCore.Qt.MouseButton.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton:
             self._drag_pos = (
                 event.globalPosition().toPoint() - self.frameGeometry().topLeft()
             )
             event.accept()
 
     def mouseMoveEvent(self, event):
-        if event.buttons() & PyQt6.QtCore.Qt.MouseButton.LeftButton:
+        if event.buttons() & Qt.MouseButton.LeftButton:
             self.move(event.globalPosition().toPoint() - self._drag_pos)
             event.accept()
 
     def paintEvent(self, event):
-        painter = PyQt6.QtGui.QPainter(self)
-        painter.setRenderHint(PyQt6.QtGui.QPainter.RenderHint.Antialiasing)
-        center = self.rect().center()
-        radius = min(self.width(), self.height()) // 2 - 10
+        hours_angle, minutes_angle, seconds_angle = self._get_current_angles()
+        
+        painter = self._get_painter()
+        
+        center, radius = self._get_clock_center_and_radius()
 
         # Fill background with translucent color
-        bg_color = PyQt6.QtGui.QColor(30, 30, 30, 128)  # RGBA, alpha=128 for 50% translucency
-        painter.setBrush(bg_color)
-        painter.setPen(PyQt6.QtCore.Qt.PenStyle.NoPen)
-        painter.drawEllipse(self.rect())
+        self._draw_bg(painter)
 
         # Draw the second hand
-        painter.save()
-        painter.translate(center)
-        painter.rotate(self.angle)
-        pen = PyQt6.QtGui.QPen(PyQt6.QtGui.QColor("red"), 3)
-        painter.setPen(pen)
-        painter.drawLine(0, 0, 0, -radius + 30)
-        painter.restore()
+        self._draw_hand(painter, seconds_angle, "red", 3, radius - 30, center)
 
         # Draw the minute hand
-        minutes = PyQt6.QtCore.QTime.currentTime().minute()
-        minute_angle = (minutes * 6) % 360  # 360/60 = 6 degrees per minute
-        painter.save()
-        painter.translate(center)
-        painter.rotate(minute_angle)
-        pen = PyQt6.QtGui.QPen(PyQt6.QtGui.QColor("blue"), 5)
-        painter.setPen(pen)
-        painter.drawLine(0, 0, 0, -radius + 30)
-        painter.restore()
+        self._draw_hand(painter, minutes_angle, "blue", 5, radius - 30, center)
 
         # Draw the hour hand
-        hours = PyQt6.QtCore.QTime.currentTime().hour() % 12
-        hour_angle = (
-            hours * 30 + minutes / 2
-        ) % 360  # 360/12 = 30 degrees per hour, plus half a degree per minute
-        painter.save()
-        painter.translate(center)
-        painter.rotate(hour_angle)
-        pen = PyQt6.QtGui.QPen(PyQt6.QtGui.QColor("green"), 7)
-        painter.setPen(pen)
-        painter.drawLine(0, 0, 0, -radius + 40)
-        painter.restore()
+        self._draw_hand(painter, hours_angle, "green", 7, radius - 40, center)
 
         # Draw the labels from 1 to 12
+        self._draw_labels(painter, center, radius)
+
+    def _get_painter(self):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        return painter
+
+    def _get_clock_center_and_radius(self):
+        center = self.rect().center()
+        radius = min(self.width(), self.height()) // 2 - 10
+        return center,radius
+
+    def _draw_labels(self, painter, center, radius):
+        """Draws the clock labels from 1 to 12."""
+        painter.save()
+        pen = QPen(QColor("white"), 2)
+        painter.setPen(pen)
         for i in range(1, 13):
             angle = (i * 30) % 360
             painter.save()
-            pen = PyQt6.QtGui.QPen(PyQt6.QtGui.QColor("white"), 2)
             painter.setPen(pen)
             painter.translate(center)
             painter.rotate(angle)
@@ -97,11 +91,37 @@ class MainWindow(QMainWindow):
             painter.rotate(-angle)
             painter.drawText(-10, 0, str(i))
             painter.restore()
+        painter.restore()
 
-    def print_time(self):
-        seconds = PyQt6.QtCore.QTime.currentTime().second() % 60
-        self.angle = seconds * 6  # 360/60 = 6 degrees per second
-        self.update()
+    def _get_current_angles(self):
+        current_time = QTime.currentTime()
+        seconds = current_time.second() % 60
+        minutes = current_time.minute() % 60
+        hours = current_time.hour() % 12
+
+        seconds_angle = seconds * 6  # 360/60 = 6 degrees per second
+        minutes_angle = (minutes + seconds / 60) * 6  # 360/60 = 6 degrees per minute
+        hours_angle = (
+            (hours + minutes / 60 + seconds / 3600) * 30
+        ) % 360  # 360/12 = 30 degrees per hour
+        return hours_angle, minutes_angle, seconds_angle
+
+    def _draw_bg(self, painter):
+        bg_color = PyQt6.QtGui.QColor(
+            30, 30, 30, 128
+        )  # RGBA, alpha=128 for 50% translucency
+        painter.setBrush(bg_color)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(self.rect())
+
+    def _draw_hand(self, painter, angle, color, width, length, center):
+        painter.save()
+        painter.translate(center)
+        painter.rotate(angle)
+        pen = QPen(QColor(color), width)
+        painter.setPen(pen)
+        painter.drawLine(0, 0, 0, -length)
+        painter.restore()
 
     def mouseDoubleClickEvent(self, event):
         self.close()
@@ -109,6 +129,6 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = MainWindow()
+    window = AnalogClockWindow()
     window.show()
     sys.exit(app.exec())

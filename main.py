@@ -52,7 +52,7 @@ class AnalogClockWindow(QMainWindow):
         center, radius = self._get_clock_center_and_radius()
 
         # Fill background with translucent color
-        self._draw_bg(painter)
+        self._draw_background(painter)
 
         # Draw the second hand
         self._draw_hand(painter, seconds_angle, "red", 3, radius - 30, center)
@@ -64,7 +64,7 @@ class AnalogClockWindow(QMainWindow):
         self._draw_hand(painter, hours_angle, "green", 7, radius - 40, center)
 
         # Draw the labels from 1 to 12
-        self._draw_labels(painter, center, radius)
+        self._draw_labels(painter, center, radius + 10)
 
     def _get_painter(self):
         painter = QPainter(self)
@@ -77,19 +77,22 @@ class AnalogClockWindow(QMainWindow):
         return center,radius
 
     def _draw_labels(self, painter, center, radius):
-        """Draws the clock labels from 1 to 12."""
+        """Draws the clock labels from 1 to 12, centered at their positions."""
         painter.save()
         pen = QPen(QColor("white"), 2)
         painter.setPen(pen)
-        for i in range(1, 13):
-            angle = (i * 30) % 360
+        font_metrics = painter.fontMetrics()
+        for i_label in range(1, 13):
+            angle = (i_label * 30) % 360
             painter.save()
-            painter.setPen(pen)
             painter.translate(center)
             painter.rotate(angle)
-            painter.translate(0, -radius + 10)
+            painter.translate(0, -radius + 25)
             painter.rotate(-angle)
-            painter.drawText(-10, 0, str(i))
+            text = str(i_label)
+            text_width = font_metrics.horizontalAdvance(text)
+            text_height = font_metrics.height()
+            painter.drawText(-text_width // 2, text_height // 2, text)
             painter.restore()
         painter.restore()
 
@@ -106,13 +109,15 @@ class AnalogClockWindow(QMainWindow):
         ) % 360  # 360/12 = 30 degrees per hour
         return hours_angle, minutes_angle, seconds_angle
 
-    def _draw_bg(self, painter):
-        bg_color = PyQt6.QtGui.QColor(
-            30, 30, 30, 128
-        )  # RGBA, alpha=128 for 50% translucency
+    def _draw_background(self, painter):
+        bg_color = QColor(30, 30, 30, 128)  # RGBA, alpha=128 for 50% translucency
         painter.setBrush(bg_color)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(self.rect())
+        border_color = QColor(255, 255, 255, 64)  # Semi-transparent border
+        pen = QPen(border_color, 4)
+        painter.setPen(pen)
+        painter.drawEllipse(self.rect().adjusted(2, 2, -2, -2))
 
     def _draw_hand(self, painter, angle, color, width, length, center):
         painter.save()
